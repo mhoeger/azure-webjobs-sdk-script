@@ -4,9 +4,13 @@
 using System;
 using System.Net.Http;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs.Script.WebHost.Extensions;
 using Microsoft.Azure.WebJobs.Script.WebHost.Management;
+using Microsoft.Azure.WebJobs.Script.WebHost.Security.Authorization.Policies;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 {
@@ -33,6 +37,20 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
         }
 
         public async Task InvokeAsync(HttpContext context, RequestDelegate _)
+        {
+            var authorized = await AuthenticateAndAuthorize(context);
+
+            if (!authorized)
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            }
+            else
+            {
+                await InternalInvokeAsync(context);
+            }
+        }
+
+        private async Task InternalInvokeAsync(HttpContext context)
         {
             // choose the right instance to use.
             var handler = context.Request.Path.StartsWithSegments("/admin/vfs") ? _vfs : _zip;
@@ -82,6 +100,20 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
                 await context.Response.WriteAsync(e.Message);
             }
+        }
+
+        private async Task<bool> AuthenticateAndAuthorize(HttpContext context)
+        {
+            var authorizationEvaluator = context.RequestServices.GetRequiredService<IAuthorizationPolicyProvider>();
+            var policyEvaluator = context.RequestServices.GetRequiredService<IPolicyEvaluator>();
+
+            var policy = await authorizationEvaluator.GetPolicyAsync(PolicyNames.AdminAuthLevel);
+            var authenticateResult = await policyEvaluator.AuthenticateAsync(policy, context);
+
+            // For admin, resource is null.
+            var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, resource: null);
+
+            return authorizeResult.Succeeded;
         }
     }
 }
