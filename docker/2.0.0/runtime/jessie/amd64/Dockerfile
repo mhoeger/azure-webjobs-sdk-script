@@ -1,13 +1,18 @@
-FROM microsoft/dotnet:2.0.0-runtime-jessie
+FROM microsoft/dotnet:2.0.0-sdk-2.0.2-jessie AS installer-env
 
 ENV PublishWithAspNetCoreTargetManifest false
-RUN git clone https://github.com/Azure/azure-webjobs-sdk-script --depth 1 \
-    cd azure-webjobs-sdk-script \
-    dotnet build WebJobs.Script.sln \
-    dotnet publish src\WebJobs.Script.WebHost\WebJobs.Script.WebHost.csproj --output /azure-functions-runtime \
-    cd .. \
-    rm -rf azure-webjobs-sdk-script
+RUN apt-get update && \
+    apt-get install git -y && \
+    git clone https://github.com/Azure/azure-webjobs-sdk-script --depth 1 && \
+    cd azure-webjobs-sdk-script && \
+    dotnet build WebJobs.Script.sln && \
+    dotnet publish src/WebJobs.Script.WebHost/WebJobs.Script.WebHost.csproj --output /azure-functions-runtime
+
+# Runtime image
+FROM microsoft/dotnet:2.0.0-runtime-jessie
+
+COPY --from=installer-env ["/azure-functions-runtime", "/azure-functions-runtime"]
 
 ENV AzureWebJobsScriptRoot=/app
 
-CMD ["dotnet", "/app/Microsoft.Azure.WebJobs.Script.WebHost.dll"]
+CMD ["dotnet", "/azure-functions-runtime/Microsoft.Azure.WebJobs.Script.WebHost.dll"]
