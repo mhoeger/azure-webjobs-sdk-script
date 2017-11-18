@@ -113,9 +113,9 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
                     _settingsManager.Reset();
 
                     _activeScriptHostConfig = CreateScriptHostConfiguration(settings);
-                    _activeHostManager = new WebScriptHostManager(_activeScriptHostConfig, _secretManagerFactory, _eventManager,  _settingsManager, settings, _router, _loggerFactoryBuilder);
+                    _activeHostManager = new WebScriptHostManager(_activeScriptHostConfig, _secretManagerFactory, _eventManager, _settingsManager, settings, _router, _loggerFactoryBuilder);
                     // _activeReceiverManager = new WebHookReceiverManager(_activeHostManager.SecretManager);
-                    InitializeFileSystem();
+                    InitializeFileSystem(settings);
 
                     if (_standbyHostManager != null)
                     {
@@ -150,7 +150,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
                     _standbyHostManager = new WebScriptHostManager(_standbyScriptHostConfig, _secretManagerFactory, _eventManager, _settingsManager, standbySettings, _router, _loggerFactoryBuilder);
                     // _standbyReceiverManager = new WebHookReceiverManager(_standbyHostManager.SecretManager);
 
-                    InitializeFileSystem();
+                    InitializeFileSystem(settings);
                     StandbyManager.Initialize(_standbyScriptHostConfig);
                 }
             }
@@ -244,8 +244,15 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             else
             {
                 // Ensure we have our scripts directory in non-Azure scenarios
-                Directory.CreateDirectory(settings.ScriptPath);
-                Directory.CreateDirectory(settings.TestDataPath);
+                if (!string.IsNullOrEmpty(settings.ScriptPath))
+                {
+                    Directory.CreateDirectory(settings.ScriptPath);
+                }
+
+                if (!string.IsNullOrEmpty(settings.TestDataPath))
+                {
+                    Directory.CreateDirectory(settings.TestDataPath);
+                }
             }
         }
 
