@@ -48,6 +48,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
         private bool _hostStarted = false;
         private IDictionary<IHttpRoute, FunctionDescriptor> _httpFunctions;
         private HttpRouteCollection _httpRoutes;
+        private HttpRouteCollection _httpFunctionsOnlyRoutes;
         private HttpRequestManager _httpRequestManager;
 
         public WebScriptHostManager(ScriptHostConfiguration config,
@@ -218,6 +219,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             {
                 (_secretManager as IDisposable)?.Dispose();
                 _metricsLogger?.Dispose();
+                _httpFunctionsOnlyRoutes?.Dispose();
                 _httpRoutes?.Dispose();
             }
 
@@ -276,7 +278,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             return getDataMethod.Invoke(null, new object[] { context });
         }
 
-        public FunctionDescriptor GetHttpFunctionOrNull(HttpRequestMessage request)
+        public FunctionDescriptor GetHttpFunctionOrNull(HttpRequestMessage request, bool functionRoutesFirst = false)
         {
             if (request == null)
             {
@@ -289,7 +291,25 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             }
 
             FunctionDescriptor function = null;
-            var routeData = _httpRoutes.GetRouteData(request);
+
+            // if true, the match will first be against local http trigger functions otherwise it will be against proxies and functions combined with proxies matching first which is the default behavior.
+            if (functionRoutesFirst)
+            {
+                function = GetFunctionDescriptorFromRoute(request, _httpFunctionsOnlyRoutes.GetRouteData(request));
+            }
+
+            if (function == null)
+            {
+                function = GetFunctionDescriptorFromRoute(request, _httpRoutes.GetRouteData(request));
+            }
+
+            return function;
+        }
+
+        private FunctionDescriptor GetFunctionDescriptorFromRoute(HttpRequestMessage request, IHttpRouteData routeData)
+        {
+            FunctionDescriptor function = null;
+
             if (routeData != null)
             {
                 _httpFunctions.TryGetValue(routeData.Route, out function);
@@ -392,6 +412,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
 
             _httpFunctions = new Dictionary<IHttpRoute, FunctionDescriptor>();
             _httpRoutes = new HttpRouteCollection();
+            _httpFunctionsOnlyRoutes = new HttpRouteCollection();
 
             // Proxy routes will take precedence over http trigger functions and http trigger
             // routes so they will be added first to the list of http routes.
@@ -412,6 +433,11 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
                     if (httpRouteFactory.TryAddRoute(function.Metadata.Name, httpTrigger.Route, httpMethods, _httpRoutes, out httpRoute))
                     {
                         _httpFunctions.Add(httpRoute, function);
+                    }
+
+                    if (!function.Metadata.IsProxy)
+                    {
+                        functionHttpRouteFactory.TryAddRoute(function.Metadata.Name, httpTrigger.Route, httpMethods, _httpFunctionsOnlyRoutes, out httpRoute);
                     }
                 }
             }
