@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -144,6 +145,29 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
                 {
                     throw new FileNotFoundException($"Did not find worker for for language: {workerDescription.Language}", workerDescription.GetWorkerPath());
                 }
+
+                // validate (note sync!!)
+                var startInfo = new ProcessStartInfo("mhoeger\\repos\\validate.bat")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    ErrorDialog = false,
+                    WorkingDirectory = "c:\\" // context.WorkingDirectory,
+                };
+
+                var process = new Process { StartInfo = startInfo };
+
+                process.OutputDataReceived += (object sender, System.Diagnostics.DataReceivedEventArgs e) =>
+                {
+                    logger.LogInformation("output>>" + e.Data);
+                };
+
+                process.Start();
+                process.BeginOutputReadLine();
+                process.WaitForExit();
+                logger.LogInformation("ExitCode: {0}", process.ExitCode);
+                process.Close();
             }
             catch (Exception ex)
             {
