@@ -37,9 +37,9 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
         [Fact]
         public void CreateLogger_ReturnsSystemLogger_ForNonUserCategories()
         {
-            Assert.IsType<SystemLogger>(_provider.CreateLogger(LogCategories.CreateFunctionCategory("TestFunction")));
-            Assert.IsType<SystemLogger>(_provider.CreateLogger(ScriptConstants.LogCategoryHostGeneral));
-            Assert.IsType<SystemLogger>(_provider.CreateLogger("NotAFunction.TestFunction.User"));
+            Assert.IsType<SystemLoggerService>(_provider.CreateLogger(LogCategories.CreateFunctionCategory("TestFunction")));
+            Assert.IsType<SystemLoggerService>(_provider.CreateLogger(ScriptConstants.LogCategoryHostGeneral));
+            Assert.IsType<SystemLoggerService>(_provider.CreateLogger("NotAFunction.TestFunction.User"));
         }
 
         [Fact]
