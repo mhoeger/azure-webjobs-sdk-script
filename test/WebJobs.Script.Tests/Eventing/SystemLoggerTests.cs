@@ -13,7 +13,7 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
 {
     public class SystemLoggerTests
     {
-        private readonly SystemLoggerService _logger;
+        private readonly SystemLogger _logger;
         private readonly Mock<IEventGenerator> _mockEventGenerator;
         private readonly string _websiteName;
         private readonly string _subscriptionId;
@@ -41,7 +41,7 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
             _category = LogCategories.CreateFunctionCategory(_functionName);
             _debugStateProvider = new Mock<IDebugStateProvider>(MockBehavior.Strict);
             _debugStateProvider.Setup(p => p.InDiagnosticMode).Returns(() => _inDiagnosticMode);
-            _logger = new SystemLoggerService(_hostInstanceId, _category, _mockEventGenerator.Object, environment, _debugStateProvider.Object);
+            _logger = new SystemLogger(_hostInstanceId, _category, _mockEventGenerator.Object, environment, _debugStateProvider.Object);
         }
 
         [Fact]
@@ -151,7 +151,7 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
         public void Log_Ignores_FunctionUserCategory()
         {
             // Create a logger with the Function.{FunctionName}.User category, which is what determines user logs.
-            ILogger logger = new SystemLoggerService(Guid.NewGuid().ToString(), LogCategories.CreateFunctionUserCategory(_functionName), _mockEventGenerator.Object, new TestEnvironment(), _debugStateProvider.Object);
+            ILogger logger = new SystemLogger(Guid.NewGuid().ToString(), LogCategories.CreateFunctionUserCategory(_functionName), _mockEventGenerator.Object, new TestEnvironment(), _debugStateProvider.Object);
             logger.LogDebug("TestMessage");
 
             // Make sure it's never been called.

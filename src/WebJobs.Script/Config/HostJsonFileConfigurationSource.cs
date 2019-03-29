@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using Microsoft.Azure.WebJobs.Logging;
+using Microsoft.Azure.WebJobs.Script.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -17,18 +18,15 @@ namespace Microsoft.Azure.WebJobs.Script.Configuration
 {
     public class HostJsonFileConfigurationSource : IConfigurationSource
     {
-        private readonly ILogger _logger;
+        private readonly ISemanticLogger _logger;
 
-        public HostJsonFileConfigurationSource(ScriptApplicationHostOptions applicationHostOptions, IEnvironment environment, ILoggerFactory loggerFactory)
+        public HostJsonFileConfigurationSource(ScriptApplicationHostOptions applicationHostOptions, IEnvironment environment, ISemanticLogger semanticLogger)
         {
-            if (loggerFactory == null)
-            {
-                throw new ArgumentNullException(nameof(loggerFactory));
-            }
+            _logger = semanticLogger ?? throw new ArgumentNullException(nameof(semanticLogger));
 
             HostOptions = applicationHostOptions;
             Environment = environment;
-            _logger = loggerFactory.CreateLogger(LogCategories.Startup);
+            // _logger = semanticLogger.CreateLogger(LogCategories.Startup);
         }
 
         public ScriptApplicationHostOptions HostOptions { get; }
@@ -50,9 +48,9 @@ namespace Microsoft.Azure.WebJobs.Script.Configuration
 
             private readonly HostJsonFileConfigurationSource _configurationSource;
             private readonly Stack<string> _path;
-            private readonly ILogger _logger;
+            private readonly ISemanticLogger _logger;
 
-            public HostJsonFileConfigurationProvider(HostJsonFileConfigurationSource configurationSource, ILogger logger)
+            public HostJsonFileConfigurationProvider(HostJsonFileConfigurationSource configurationSource, ISemanticLogger logger)
             {
                 _configurationSource = configurationSource;
                 _path = new Stack<string>();
@@ -139,11 +137,14 @@ namespace Microsoft.Azure.WebJobs.Script.Configuration
                 string sanitizedJson = SanitizeHostJson(hostConfigObject);
                 string readFileMessage = $"Host configuration file read:{NewLine}{sanitizedJson}";
 
-                _logger.LogDebug("Host configuration applied.");
+                _logger.HostConfigApplied();
+                // TODO: remove _logger.LogDebug("Host configuration applied.");
 
                 // Do not log these until after all the configuration is done so the proper filters are applied.
-                _logger.LogInformation(readingFileMessage);
-                _logger.LogInformation(readFileMessage);
+                _logger.ReadingHostConfig(hostFilePath);
+                // TODO: remove _logger.LogInformation(readingFileMessage);
+                _logger.ReadHostConfig(sanitizedJson);
+                // TODO: remove _logger.LogInformation(readFileMessage);
 
                 return hostConfigObject;
             }
@@ -153,7 +154,8 @@ namespace Microsoft.Azure.WebJobs.Script.Configuration
                 // If the object is empty, initialize it to include the version and write the file.
                 if (!hostConfigObject.HasValues)
                 {
-                    _logger.LogInformation($"Empty host configuration file found. Creating a default {ScriptConstants.HostMetadataFileName} file.");
+                    _logger.HostConfigIsEmpty();
+                    // TODO: remove _logger.LogInformation($"Empty host configuration file found. Creating a default {ScriptConstants.HostMetadataFileName} file.");
 
                     hostConfigObject = GetDefaultHostConfigObject();
                     TryWriteHostJson(hostJsonPath, hostConfigObject);
@@ -180,7 +182,8 @@ namespace Microsoft.Azure.WebJobs.Script.Configuration
                 catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)
                 {
                     // if no file exists we default the config
-                    _logger.LogInformation($"No host configuration file found. Creating a default {ScriptConstants.HostMetadataFileName} file.");
+                    _logger.NoHostConfigFound();
+                    // TODO: remove _logger.LogInformation($"No host configuration file found. Creating a default {ScriptConstants.HostMetadataFileName} file.");
 
                     hostConfigObject = GetDefaultHostConfigObject();
                     TryWriteHostJson(configFilePath, hostConfigObject);
@@ -204,12 +207,14 @@ namespace Microsoft.Azure.WebJobs.Script.Configuration
                     }
                     catch
                     {
-                        _logger.LogInformation($"Failed to create {ScriptConstants.HostMetadataFileName} file. Host execution will continue.");
+                        _logger.HostConfigCreationFailed();
+                        // TODO: remove _logger.LogInformation($"Failed to create {ScriptConstants.HostMetadataFileName} file. Host execution will continue.");
                     }
                 }
                 else
                 {
-                    _logger.LogInformation($"File system is read-only. Skipping {ScriptConstants.HostMetadataFileName} creation.");
+                    _logger.HostConfigCreationSkipped();
+                    // TODO: remove _logger.LogInformation($"File system is read-only. Skipping {ScriptConstants.HostMetadataFileName} creation.");
                 }
             }
 
