@@ -84,7 +84,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
 
             _rpcChannelReadySubscriptions = _eventManager.OfType<RpcJobHostChannelReadyEvent>()
                 .ObserveOn(NewThreadScheduler.Default)
-                .Subscribe(AddOrUpdateWorkerChannels);
+                .Subscribe(LoadFunctionsToWorkerChannel);
 
             _shutdownStandbyWorkerChannels = ShutdownWebhostLanguageWorkerChannels;
             _shutdownStandbyWorkerChannels = _shutdownStandbyWorkerChannels.Debounce(5000);
@@ -264,7 +264,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             }
         }
 
-        private void AddOrUpdateWorkerChannels(RpcJobHostChannelReadyEvent rpcChannelReadyEvent)
+        private void LoadFunctionsToWorkerChannel(RpcJobHostChannelReadyEvent rpcChannelReadyEvent)
         {
             if (!_disposing)
             {

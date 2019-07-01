@@ -86,5 +86,15 @@ namespace Microsoft.Azure.WebJobs.Script.Tests.Rpc
         {
             throw new System.NotImplementedException();
         }
+
+        public Task<ILanguageWorkerChannel> InitializePlaceholderChannelAsync(string runtime)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IEnumerable<ILanguageWorkerChannel> GetPlaceholderChannels(string runtime)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

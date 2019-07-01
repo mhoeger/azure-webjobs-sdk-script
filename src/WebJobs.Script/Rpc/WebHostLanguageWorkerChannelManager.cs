@@ -164,20 +164,22 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             return true;
         }
 
-        public bool ShutdownChannelIfExists(string runtime, string workerId, bool isPlaceholder)
+        public bool ShutdownChannelIfExists(string runtime, string workerId)
         {
             if (string.IsNullOrEmpty(runtime))
             {
                 throw new ArgumentNullException(nameof(runtime));
             }
-            var channelKey = new WorkerChannelKey(runtime, isPlaceholder);
-            if (_workerChannels.TryGetValue(channelKey, out List<ILanguageWorkerChannel> languageWorkerChannels))
+
+            var runtimeChannels = _workerChannels.Where(ch => !ch.Key.KeyName.Contains(runtime));
+            foreach (var languageWorkerChannels in runtimeChannels)
             {
-                var channel = languageWorkerChannels.FirstOrDefault(ch => ch.Id == workerId);
+                var channelList = languageWorkerChannels.Value;
+                var channel = channelList.FirstOrDefault(ch => ch.Id == workerId);
                 if (channel != null)
                 {
                     (channel as IDisposable)?.Dispose();
-                    languageWorkerChannels.Remove(channel);
+                    channelList.Remove(channel);
                     return true;
                 }
             }

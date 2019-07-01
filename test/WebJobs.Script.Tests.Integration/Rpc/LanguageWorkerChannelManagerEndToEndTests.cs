@@ -23,8 +23,8 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
         public void InitializeAsync_DoNotInitialize_JavaWorker_ProxiesOnly()
         {
             var channelManager = _languageWorkerChannelManager as WebHostLanguageWorkerChannelManager;
-            var javaChannel = channelManager.GetChannel(LanguageWorkerConstants.JavaLanguageWorkerName);
-            Assert.Null(javaChannel);
+            var javaChannels = channelManager.GetChannels(LanguageWorkerConstants.JavaLanguageWorkerName);
+            Assert.Empty(javaChannels);
         }
 
         public class TestFixture : ScriptHostEndToEndTestFixture

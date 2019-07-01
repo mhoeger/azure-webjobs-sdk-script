@@ -107,7 +107,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
         private Task InitializePlaceholderChannelsAsync(OSPlatform os)
         {
             return Task.WhenAll(_hostingOSToWhitelistedRuntimes[os].Select(runtime =>
-                _languageWorkerChannelManager.InitializeChannelAsync(runtime)));
+                _languageWorkerChannelManager.InitializePlaceholderChannelAsync(runtime)));
         }
 
         private Task InitializeWebHostRuntimeChannelsAsync()

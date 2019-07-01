@@ -137,9 +137,9 @@ namespace Microsoft.Azure.WebJobs.Script.Tests
         {
             var channelManager = _languageWorkerChannelManager as WebHostLanguageWorkerChannelManager;
 
-            var javaChannel = channelManager.GetChannel(LanguageWorkerConstants.JavaLanguageWorkerName);
+            var javaChannel = channelManager.GetChannels(LanguageWorkerConstants.JavaLanguageWorkerName);
             Assert.Null(javaChannel);
-            var nodeChannel = channelManager.GetChannel(LanguageWorkerConstants.NodeLanguageWorkerName);
+            var nodeChannel = channelManager.GetChannels(LanguageWorkerConstants.NodeLanguageWorkerName);
             Assert.Null(nodeChannel);
         }
 
