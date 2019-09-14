@@ -188,7 +188,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             //content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.WarmUpNode.function.json");
             //File.WriteAllText(Path.Combine(nodePath, "function.json"), content);
             _logger.LogInformation("8");
-            content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.index.js");
+            content = "module.exports = async function (c, r) { c.log('hello'); return 'warmup complete'; }";
             _logger.LogInformation($"writing content {content}");
             _logger.LogInformation(Path.Combine(functionPath, "index.js"));
             File.WriteAllText(Path.Combine(functionPath, "index.js"), content);

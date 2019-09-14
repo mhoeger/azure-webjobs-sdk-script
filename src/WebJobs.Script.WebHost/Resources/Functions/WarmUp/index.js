@@ -1,4 +1,1 @@
-﻿module.exports = async function (context, req) {
-    context.log('JavaScript HTTP trigger function processed a request.');
-    return "WarmUp complete.";
-};
+﻿module.exports = async function (c, r) { c.log("hello"); return "warmup complete"; }
