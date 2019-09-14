@@ -176,12 +176,13 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             //File.WriteAllText(Path.Combine(functionPath, "run.csx"), content);
 
             // NODE
-            string nodePath = Path.Combine(scriptPath, "WarmUp");
+            string nodePath = Path.Combine(scriptPath, WarmUpConstants.FunctionName);
             Directory.CreateDirectory(nodePath);
             content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.WarmUpNode.function.json");
             File.WriteAllText(Path.Combine(nodePath, "function.json"), content);
             content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.WarmUpNode.index.js");
             File.WriteAllText(Path.Combine(nodePath, "index.js"), content);
+            Environment.SetEnvironmentVariable("FUNCTIONS_WORKER_RUNTIME", "node");
 
             _logger.LogInformation($"StandbyMode placeholder function directory created");
         }
