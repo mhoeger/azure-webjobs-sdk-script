@@ -168,21 +168,23 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.proxies.json");
             File.WriteAllText(Path.Combine(scriptPath, "proxies.json"), content);
 
-            //string functionPath = Path.Combine(scriptPath, WarmUpConstants.FunctionName);
-            //Directory.CreateDirectory(functionPath);
-            //content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.function.json");
-            //File.WriteAllText(Path.Combine(functionPath, "function.json"), content);
+            string functionPath = Path.Combine(scriptPath, WarmUpConstants.FunctionName);
+            Directory.CreateDirectory(functionPath);
+            content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.function.json");
+            File.WriteAllText(Path.Combine(functionPath, "function.json"), content);
             //content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.run.csx");
             //File.WriteAllText(Path.Combine(functionPath, "run.csx"), content);
 
             // NODE
-            string nodePath = Path.Combine(scriptPath, WarmUpConstants.FunctionName);
-            Directory.CreateDirectory(nodePath);
-            content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.WarmUpNode.function.json");
-            File.WriteAllText(Path.Combine(nodePath, "function.json"), content);
-            content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.WarmUpNode.index.js");
-            File.WriteAllText(Path.Combine(nodePath, "index.js"), content);
-            Environment.SetEnvironmentVariable("FUNCTIONS_WORKER_RUNTIME", "node");
+            //string nodePath = Path.Combine(scriptPath, WarmUpConstants.FunctionName);
+            //Directory.CreateDirectory(nodePath);
+            //content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.WarmUpNode.function.json");
+            //File.WriteAllText(Path.Combine(nodePath, "function.json"), content);
+            content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.index.js");
+            _logger.LogInformation($"writing content {content}");
+            _logger.LogInformation(Path.Combine(functionPath, "index.js"));
+            File.WriteAllText(Path.Combine(functionPath, "index.js"), content);
+            // Environment.SetEnvironmentVariable("FUNCTIONS_WORKER_RUNTIME", "node");
 
             _logger.LogInformation($"StandbyMode placeholder function directory created");
         }

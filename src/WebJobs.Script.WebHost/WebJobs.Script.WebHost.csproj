@@ -25,11 +25,13 @@
   <ItemGroup>
     <Content Remove="Resources\Functions\host.json" />
     <Content Remove="Resources\Functions\proxies.json" />
+    <Content Remove="Resources\Functions\WarmUpNode\function.json" />
     <Content Remove="Resources\Functions\WarmUp\function.json" />
   </ItemGroup>
   <ItemGroup>
     <None Remove="applicationHost.xdt" />
     <None Remove="Resources\app_offline.htm" />
+    <None Remove="Resources\Functions\WarmUpNode\index.js" />
     <None Remove="Resources\Functions\WarmUp\run.csx" />
     <None Remove="web.InProcess.win-x64.xdt" />
     <None Remove="web.InProcess.win-x86.xdt" />
@@ -74,6 +76,8 @@
     <EmbeddedResource Include="Resources\app_offline.htm" />
     <EmbeddedResource Include="Resources\Functions\host.json" />
     <EmbeddedResource Include="Resources\Functions\proxies.json" />
+    <EmbeddedResource Include="Resources\Functions\WarmUpNode\function.json" />
+    <EmbeddedResource Include="Resources\Functions\WarmUpNode\index.js" />
     <EmbeddedResource Include="Resources\Functions\WarmUp\function.json" />
     <EmbeddedResource Include="Resources\Functions\WarmUp\run.csx" />
   </ItemGroup>
