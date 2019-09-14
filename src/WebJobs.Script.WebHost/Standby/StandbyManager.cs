@@ -160,18 +160,25 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             _logger.LogInformation($"Creating StandbyMode placeholder function directory ({scriptPath})");
 
             await FileUtility.DeleteDirectoryAsync(scriptPath, true);
+            _logger.LogInformation("1");
             FileUtility.EnsureDirectoryExists(scriptPath);
+            _logger.LogInformation("2");
 
             string content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.host.json");
             File.WriteAllText(Path.Combine(scriptPath, "host.json"), content);
+            _logger.LogInformation("3");
 
             content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.proxies.json");
             File.WriteAllText(Path.Combine(scriptPath, "proxies.json"), content);
+            _logger.LogInformation("4");
 
             string functionPath = Path.Combine(scriptPath, WarmUpConstants.FunctionName);
+            _logger.LogInformation("5");
             Directory.CreateDirectory(functionPath);
+            _logger.LogInformation("6");
             content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.function.json");
             File.WriteAllText(Path.Combine(functionPath, "function.json"), content);
+            _logger.LogInformation("7");
             //content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.run.csx");
             //File.WriteAllText(Path.Combine(functionPath, "run.csx"), content);
 
@@ -180,6 +187,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             //Directory.CreateDirectory(nodePath);
             //content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.WarmUpNode.function.json");
             //File.WriteAllText(Path.Combine(nodePath, "function.json"), content);
+            _logger.LogInformation("8");
             content = FileUtility.ReadResourceString($"{ScriptConstants.ResourcePath}.Functions.{WarmUpConstants.FunctionName}.index.js");
             _logger.LogInformation($"writing content {content}");
             _logger.LogInformation(Path.Combine(functionPath, "index.js"));
