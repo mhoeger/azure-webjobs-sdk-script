@@ -165,10 +165,10 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
 
         public async Task InitializeAsync(IEnumerable<FunctionMetadata> functions)
         {
-            if (_environment.IsPlaceholderModeEnabled())
-            {
-                return;
-            }
+            //if (_environment.IsPlaceholderModeEnabled())
+            //{
+            //    return;
+            //}
 
             _workerRuntime = _workerRuntime ?? Utility.GetWorkerRuntime(functions);
             _functions = functions;
