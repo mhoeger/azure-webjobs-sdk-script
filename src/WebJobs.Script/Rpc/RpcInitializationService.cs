@@ -34,7 +34,6 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
                 OSPlatform.Linux,
                 new List<string>()
                 {
-                    LanguageWorkerConstants.PythonLanguageWorkerName,
                     LanguageWorkerConstants.NodeLanguageWorkerName
                 }
             }
@@ -43,7 +42,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
         // _webHostLevelWhitelistedRuntimes are started at webhost level when running in Azure and locally
         private List<string> _webHostLevelWhitelistedRuntimes = new List<string>()
         {
-            LanguageWorkerConstants.JavaLanguageWorkerName
+            LanguageWorkerConstants.NodeLanguageWorkerName
         };
 
         public RpcInitializationService(IOptionsMonitor<ScriptApplicationHostOptions> applicationHostOptions, IEnvironment environment, IRpcServer rpcServer, IWebHostLanguageWorkerChannelManager languageWorkerChannelManager, ILogger<RpcInitializationService> logger)
