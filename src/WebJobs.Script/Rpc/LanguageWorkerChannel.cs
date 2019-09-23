@@ -53,8 +53,9 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
         private Capabilities _workerCapabilities;
         private ILogger _workerChannelLogger;
         private ILanguageWorkerProcess _languageWorkerProcess;
-        private TaskCompletionSource<bool> _reloadTask = new TaskCompletionSource<bool>();
+        private TaskCompletionSource<bool> _reloadTask;
         private TaskCompletionSource<bool> _workerInitTask = new TaskCompletionSource<bool>();
+        private TaskCompletionSource<bool> _functionLoadTask = new TaskCompletionSource<bool>();
 
         internal LanguageWorkerChannel(
            string workerId,
@@ -183,19 +184,25 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             }
         }
 
-        public void SendFunctionLoadRequests()
+        public async Task SendFunctionLoadRequests(IEnumerable<FunctionMetadata> functions = null)
         {
-            if (_functions != null)
+            await _workerInitTask.Task;
+            if (_reloadTask != null)
             {
-                foreach (FunctionMetadata metadata in _functions)
-                {
-                    SendFunctionLoadRequest(metadata);
-                }
+                await _reloadTask.Task;
+            }
+
+            var f = _functions ?? functions;
+
+            foreach (FunctionMetadata metadata in f)
+            {
+                SendFunctionLoadRequest(metadata);
             }
         }
 
         public Task SendFunctionEnvironmentReloadRequest()
         {
+            _reloadTask = new TaskCompletionSource<bool>();
             _workerChannelLogger.LogDebug("Sending FunctionEnvironmentReloadRequest");
             _eventSubscriptions
                 .Add(_inboundWorkerEvents.Where(msg => msg.MessageType == MsgType.FunctionEnvironmentReloadResponse)
@@ -273,6 +280,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             {
                 //Cache function load errors to replay error messages on invoking failed functions
                 _functionLoadErrors[loadResponse.FunctionId] = ex;
+                _functionLoadTask.SetException(ex);
             }
 
             if (loadResponse.IsDependencyDownloaded)
@@ -280,15 +288,55 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
                 _workerChannelLogger?.LogInformation($"Managed dependency successfully downloaded by the {_workerConfig.Language} language worker");
             }
 
-            // link the invocation inputs to the invoke call
-            var invokeBlock = new ActionBlock<ScriptInvocationContext>(ctx => SendInvocationRequest(ctx));
-            // associate the invocation input buffer with the function
-            var disposableLink = _functionInputBuffers[loadResponse.FunctionId].LinkTo(invokeBlock);
-            _inputLinks.Add(disposableLink);
+            // This assumes that only one function will be loaded, which we will assume because this will
+            // be fixed outside of fast path changes. or at least needs to be!
+            _functionLoadTask.SetResult(true);
+
+            if (_functionInputBuffers != null)
+            {
+                // link the invocation inputs to the invoke call
+                var invokeBlock = new ActionBlock<ScriptInvocationContext>(ctx => SendInvocationRequestOld(ctx));
+                // associate the invocation input buffer with the function
+                var disposableLink = _functionInputBuffers[loadResponse.FunctionId].LinkTo(invokeBlock);
+                _inputLinks.Add(disposableLink);
+            }
         }
 
-        internal void SendInvocationRequest(ScriptInvocationContext context)
+        internal void SendInvocationRequestOld(ScriptInvocationContext context)
         {
+            try
+            {
+                if (_functionLoadErrors.ContainsKey(context.FunctionMetadata.FunctionId))
+                {
+                    _workerChannelLogger.LogDebug($"Function {context.FunctionMetadata.Name} failed to load");
+                    context.ResultSource.TrySetException(_functionLoadErrors[context.FunctionMetadata.FunctionId]);
+                    _executingInvocations.TryRemove(context.ExecutionContext.InvocationId.ToString(), out ScriptInvocationContext _);
+                }
+                else
+                {
+                    if (context.CancellationToken.IsCancellationRequested)
+                    {
+                        context.ResultSource.SetCanceled();
+                        return;
+                    }
+                    InvocationRequest invocationRequest = context.ToRpcInvocationRequest(IsTriggerMetadataPopulatedByWorker(), _workerChannelLogger, _workerCapabilities);
+                    _executingInvocations.TryAdd(invocationRequest.InvocationId, context);
+
+                    SendStreamingMessage(new StreamingMessage
+                    {
+                        InvocationRequest = invocationRequest
+                    });
+                }
+            }
+            catch (Exception invokeEx)
+            {
+                context.ResultSource.TrySetException(invokeEx);
+            }
+        }
+
+        public async Task SendInvocationRequest(ScriptInvocationContext context)
+        {
+            await _functionLoadTask.Task;
             try
             {
                 if (_functionLoadErrors.ContainsKey(context.FunctionMetadata.FunctionId))

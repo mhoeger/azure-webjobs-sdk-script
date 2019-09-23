@@ -102,6 +102,13 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             // user dependencies
             FunctionAssemblyLoadContext.ResetSharedContext();
 
+            var t = true;
+            if (t)
+            {
+                _ = _languageWorkerChannelManager.SpecializeAsync();
+                return;
+            }
+
             await _languageWorkerChannelManager.SpecializeAsync();
 
             NotifyChange();

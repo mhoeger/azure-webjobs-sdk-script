@@ -3,7 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,25 +17,39 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Template;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Azure.WebJobs.Script.Description;
 using Microsoft.Azure.WebJobs.Script.Extensions;
+using Microsoft.Azure.WebJobs.Script.Rpc;
 using Microsoft.Azure.WebJobs.Script.WebHost.Features;
 using Microsoft.Azure.WebJobs.Script.WebHost.Security.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 {
     public class FunctionInvocationMiddleware
     {
         private readonly RequestDelegate _next;
+        private readonly IOptionsMonitor<ScriptApplicationHostOptions> _options;
+        private readonly IEnumerable<WorkerConfig> _workerConfigs;
+        private ILoggerFactory _loggerFactory;
         private IApplicationLifetime _applicationLifetime;
+        private IWebHostLanguageWorkerChannelManager _webHostlanguageWorkerChannelManager;
+        private IEnumerable<FunctionMetadata> _functions;
 
-        public FunctionInvocationMiddleware(RequestDelegate next)
+        public FunctionInvocationMiddleware(RequestDelegate next, IWebHostLanguageWorkerChannelManager webHostLanguageWorkerChannelManager,
+            IOptionsMonitor<ScriptApplicationHostOptions> options, ILoggerFactory loggerFactory,
+            IOptions<LanguageWorkerOptions> workerConfigOptions)
         {
             _next = next;
+            _webHostlanguageWorkerChannelManager = webHostLanguageWorkerChannelManager;
+            _options = options;
+            _workerConfigs = workerConfigOptions.Value.WorkerConfigs;
+            _loggerFactory = loggerFactory;
         }
 
         public async Task Invoke(HttpContext context)
@@ -58,7 +74,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             if (functionExecution != null && !context.Response.HasStarted())
             {
                 int nestedProxiesCount = GetNestedProxiesCount(context, functionExecution);
-                IActionResult result = await GetResultAsync(context, functionExecution);
+                IActionResult result = await InvokeFastPath(context); // GetResultAsync(context, functionExecution);
                 if (nestedProxiesCount > 0)
                 {
                     // if Proxy, the rest of the pipleline will be processed by Proxies in
@@ -202,6 +218,113 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             else
             {
                 return true;
+            }
+        }
+
+        private async Task<IActionResult> InvokeFastPath(HttpContext httpContext)
+        {
+            IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
+            bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, executionFeature.Descriptor);
+            if (!authorized)
+            {
+                return new UnauthorizedResult();
+            }
+            if (executionFeature.Descriptor.Metadata.IsDisabled &&
+                !AuthUtility.PrincipalHasAuthLevelClaim(httpContext.User, AuthorizationLevel.Admin))
+            {
+                return new NotFoundResult();
+            }
+
+            if (executionFeature.CanExecute)
+            {
+                ILanguageWorkerChannel channel = await _webHostlanguageWorkerChannelManager.GetChannels("node").FirstOrDefault().Value.Task;
+
+                if (_functions == null)
+                {
+                    string scriptPath = _options.CurrentValue.ScriptPath;
+                    _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
+                    await channel.SendFunctionLoadRequests(_functions);
+                }
+
+                var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
+
+                ScriptInvocationContext scriptInvocationContext = new ScriptInvocationContext()
+                {
+                    FunctionMetadata = func,
+                    ResultSource = new TaskCompletionSource<ScriptInvocationResult>(),
+                    AsyncExecutionContext = System.Threading.ExecutionContext.Capture(),
+
+                    // TODO: link up cancellation token to parameter descriptors
+                    CancellationToken = CancellationToken.None,
+                    Logger = _loggerFactory.CreateLogger(func.Name)
+                };
+
+                await channel.SendInvocationRequest(scriptInvocationContext);
+                await scriptInvocationContext.ResultSource.Task;
+
+                var t = await scriptInvocationContext.ResultSource.Task;
+                return new OkObjectResult(t.Return);
+            }
+
+            return new OkResult();
+        }
+
+        internal FunctionMetadata GetMatchingFunction(IEnumerable<FunctionMetadata> functions, string route)
+        {
+            var dict = new RouteValueDictionary();
+            foreach (FunctionMetadata f in functions)
+            {
+                if (RouteMatcher.TryMatch("/api/" + f.FunctionDirectory, route, out dict))
+                {
+                    return f;
+                }
+            }
+            throw new Exception("NO FUNCTIONS FOUND!");
+        }
+
+        internal static Collection<FunctionMetadata> ReadFunctionsMetadata(string rootScriptPath, ICollection<string> functionsWhiteList, IEnumerable<WorkerConfig> workerConfigs,
+   Dictionary<string, ICollection<string>> functionErrors = null)
+        {
+            IEnumerable<string> functionDirectories = Directory.EnumerateDirectories(rootScriptPath);
+
+            var functions = new Collection<FunctionMetadata>();
+
+            foreach (var scriptDir in functionDirectories)
+            {
+                var function = FunctionMetadataManager.ReadFunctionMetadata(scriptDir, functionsWhiteList, workerConfigs, functionErrors);
+                if (function != null)
+                {
+                    functions.Add(function);
+                }
+            }
+            return functions;
+        }
+
+        internal class RouteMatcher
+        {
+            public static bool TryMatch(string routeTemplate, string requestPath, out RouteValueDictionary values)
+            {
+                values = new RouteValueDictionary();
+                var template = TemplateParser.Parse(routeTemplate);
+                var defaults = GetDefaults(template);
+                var matcher = new TemplateMatcher(template, defaults);
+                return matcher.TryMatch(requestPath, values);
+            }
+
+            // This method extracts the default argument values from the template.
+            private static RouteValueDictionary GetDefaults(RouteTemplate parsedTemplate)
+            {
+                var result = new RouteValueDictionary();
+
+                foreach (var parameter in parsedTemplate.Parameters)
+                {
+                    if (parameter.DefaultValue != null)
+                    {
+                        result.Add(parameter.Name, parameter.DefaultValue);
+                    }
+                }
+
+                return result;
             }
         }
     }
