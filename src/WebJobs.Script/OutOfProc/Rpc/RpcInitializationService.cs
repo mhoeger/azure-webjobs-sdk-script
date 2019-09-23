@@ -28,7 +28,11 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
         {
             {
                 OSPlatform.Windows,
-                new List<string>() { LanguageWorkerConstants.JavaLanguageWorkerName }
+                new List<string>()
+                {
+                    LanguageWorkerConstants.JavaLanguageWorkerName,
+                    LanguageWorkerConstants.NodeLanguageWorkerName
+                }
             },
             {
                 OSPlatform.Linux,
@@ -43,7 +47,8 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
         // _webHostLevelWhitelistedRuntimes are started at webhost level when running in Azure and locally
         private List<string> _webHostLevelWhitelistedRuntimes = new List<string>()
         {
-            LanguageWorkerConstants.JavaLanguageWorkerName
+            LanguageWorkerConstants.JavaLanguageWorkerName,
+            LanguageWorkerConstants.NodeLanguageWorkerName
         };
 
         private List<string> _placeholderPoolWhitelistedRuntimes = new List<string>()
