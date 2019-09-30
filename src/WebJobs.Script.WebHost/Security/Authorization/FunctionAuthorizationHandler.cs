@@ -3,18 +3,19 @@
 
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Script.Description;
 using static Microsoft.Azure.WebJobs.Script.WebHost.Security.Authorization.AuthUtility;
 
 namespace Microsoft.Azure.WebJobs.Script.WebHost.Security.Authorization
 {
-    public class FunctionAuthorizationHandler : AuthorizationHandler<FunctionAuthorizationRequirement, FunctionDescriptor>
+    public class FunctionAuthorizationHandler : AuthorizationHandler<FunctionAuthorizationRequirement, AuthorizationLevel>
     {
-        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, FunctionAuthorizationRequirement requirement, FunctionDescriptor resource)
+        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, FunctionAuthorizationRequirement requirement, AuthorizationLevel resource)
         {
-            HttpTriggerAttribute httpTrigger = resource.GetTriggerAttributeOrNull<HttpTriggerAttribute>();
+            // HttpTriggerAttribute httpTrigger = resource.GetTriggerAttributeOrNull<HttpTriggerAttribute>();
 
-            if (httpTrigger != null && PrincipalHasAuthLevelClaim(context.User, httpTrigger.AuthLevel))
+            if (PrincipalHasAuthLevelClaim(context.User, resource))
             {
                 context.Succeed(requirement);
             }
