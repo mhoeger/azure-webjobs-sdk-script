@@ -467,6 +467,7 @@ namespace Microsoft.Azure.WebJobs.Script
         internal async Task InitializeFunctionDescriptorsAsync(IEnumerable<FunctionMetadata> functionMetadata)
         {
             if (_environment.IsPlaceholderModeEnabled()
+                || _environment.GetEnvironmentVariable("FAST") == "1"
                 || string.Equals(_workerRuntime, LanguageWorkerConstants.DotNetLanguageWorkerName, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.AddingDescriptorProviderForLanguage(LanguageWorkerConstants.DotNetLanguageWorkerName);
@@ -637,7 +638,7 @@ namespace Microsoft.Azure.WebJobs.Script
             Collection<FunctionDescriptor> functionDescriptors = new Collection<FunctionDescriptor>();
             var httpFunctions = new Dictionary<string, HttpTriggerAttribute>();
 
-            if (!_environment.IsPlaceholderModeEnabled())
+            if (!_environment.IsPlaceholderModeEnabled() || _environment.GetEnvironmentVariable("FAST") == "1")
             {
                 Utility.VerifyFunctionsMatchSpecifiedLanguage(functions, _workerRuntime);
             }

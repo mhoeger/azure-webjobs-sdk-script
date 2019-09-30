@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Template;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Logging;
+using Microsoft.Azure.WebJobs.Script.Binding;
 using Microsoft.Azure.WebJobs.Script.Description;
 using Microsoft.Azure.WebJobs.Script.Extensions;
 using Microsoft.Azure.WebJobs.Script.Rpc;
@@ -28,6 +29,7 @@ using Microsoft.Azure.WebJobs.Script.WebHost.Security.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 {
@@ -63,18 +65,19 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             //    context.Items[ScriptConstants.AzureFunctionsHostKey] = scriptHost;
             //}
 
-            if (_next != null)
-            {
-                await _next(context);
-            }
-
             _applicationLifetime = context.RequestServices.GetService<IApplicationLifetime>();
 
             IFunctionExecutionFeature functionExecution = context.Features.Get<IFunctionExecutionFeature>();
-            if (functionExecution != null && !context.Response.HasStarted())
+            // if (functionExecution != null && !context.Response.HasStarted())
+            if (!context.Response.HasStarted())
             {
                 int nestedProxiesCount = GetNestedProxiesCount(context, functionExecution);
                 IActionResult result = await InvokeFastPath(context); // GetResultAsync(context, functionExecution);
+                if (result == null)
+                {
+                    await _next(context);
+                    return;
+                }
                 if (nestedProxiesCount > 0)
                 {
                     // if Proxy, the rest of the pipleline will be processed by Proxies in
@@ -85,6 +88,11 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
                 ActionContext actionContext = new ActionContext(context, new RouteData(), new ActionDescriptor());
                 await result.ExecuteResultAsync(actionContext);
+            }
+
+            if (_next != null)
+            {
+                await _next(context);
             }
         }
 
@@ -133,7 +141,9 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
             PopulateRouteData(context);
 
-            bool authorized = await AuthenticateAndAuthorizeAsync(context, functionExecution.Descriptor);
+            var isProxy = functionExecution.Descriptor.Metadata.IsProxy;
+            HttpTriggerAttribute httpTrigger = functionExecution.Descriptor.GetTriggerAttributeOrNull<HttpTriggerAttribute>();
+            bool authorized = await AuthenticateAndAuthorizeAsync(context, isProxy, httpTrigger.AuthLevel);
             if (!authorized)
             {
                 return new UnauthorizedResult();
@@ -200,9 +210,9 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             context.Items[HttpExtensionConstants.AzureWebJobsHttpRouteDataKey] = routeData;
         }
 
-        private async Task<bool> AuthenticateAndAuthorizeAsync(HttpContext context, FunctionDescriptor descriptor)
+        private async Task<bool> AuthenticateAndAuthorizeAsync(HttpContext context, bool isProxy, AuthorizationLevel authLevel)
         {
-            if (!descriptor.Metadata.IsProxy)
+            if (!isProxy)
             {
                 var policyEvaluator = context.RequestServices.GetRequiredService<IPolicyEvaluator>();
                 AuthorizationPolicy policy = AuthUtility.CreateFunctionPolicy();
@@ -211,7 +221,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                 var authenticateResult = await policyEvaluator.AuthenticateAsync(policy, context);
 
                 // Authorize using the function policy and resource
-                var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, descriptor);
+                var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, authLevel);
 
                 return authorizeResult.Succeeded;
             }
@@ -223,31 +233,50 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
         private async Task<IActionResult> InvokeFastPath(HttpContext httpContext)
         {
-            IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
-            bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, executionFeature.Descriptor);
+            ILanguageWorkerChannel channel = await _webHostlanguageWorkerChannelManager.GetChannels("node").FirstOrDefault().Value.Task;
+
+            if (channel == null || Environment.GetEnvironmentVariable("WEBSITE_PLACEHOLDER_MODE") == "1")
+            {
+                return null;
+            }
+
+            if (_functions == null)
+            {
+                string scriptPath = _options.CurrentValue.ScriptPath;
+                _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
+            }
+
+            if (httpContext.Request.Path.Value == "/specialize")
+            {
+                await channel.SendFunctionLoadRequests(_functions);
+            }
+
+            var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
+
+            if (func == null)
+            {
+                return null;
+            }
+
+            var triggerBinding = func.InputBindings.SingleOrDefault(p => p.IsTrigger);
+            triggerBinding.Raw.TryGetValue("authLevel", StringComparison.OrdinalIgnoreCase, out JToken auth);
+            Enum.TryParse(auth.ToString(), out AuthorizationLevel authLevel);
+
+            // IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
+            bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, func.IsProxy, authLevel);
             if (!authorized)
             {
                 return new UnauthorizedResult();
             }
-            if (executionFeature.Descriptor.Metadata.IsDisabled &&
+            if (func.IsDisabled &&
                 !AuthUtility.PrincipalHasAuthLevelClaim(httpContext.User, AuthorizationLevel.Admin))
             {
                 return new NotFoundResult();
             }
 
-            if (executionFeature.CanExecute)
+            var canExecute = true; // executionFeature.CanExecute
+            if (canExecute)
             {
-                ILanguageWorkerChannel channel = await _webHostlanguageWorkerChannelManager.GetChannels("node").FirstOrDefault().Value.Task;
-
-                if (_functions == null)
-                {
-                    string scriptPath = _options.CurrentValue.ScriptPath;
-                    _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
-                    await channel.SendFunctionLoadRequests(_functions);
-                }
-
-                var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
-
                 ScriptInvocationContext scriptInvocationContext = new ScriptInvocationContext()
                 {
                     FunctionMetadata = func,
@@ -274,12 +303,12 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             var dict = new RouteValueDictionary();
             foreach (FunctionMetadata f in functions)
             {
-                if (RouteMatcher.TryMatch("/api/" + f.FunctionDirectory, route, out dict))
+                if (RouteMatcher.TryMatch("/api/" + f.Name, route, out dict))
                 {
                     return f;
                 }
             }
-            throw new Exception("NO FUNCTIONS FOUND!");
+            return null;
         }
 
         internal static Collection<FunctionMetadata> ReadFunctionsMetadata(string rootScriptPath, ICollection<string> functionsWhiteList, IEnumerable<WorkerConfig> workerConfigs,
