@@ -293,7 +293,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             // be fixed outside of fast path changes. or at least needs to be!
             _functionLoadTask.SetResult(true);
 
-            if (_functionInputBuffers != null)
+            if (_functionInputBuffers != null && _functionInputBuffers.Count() > 0)
             {
                 // link the invocation inputs to the invoke call
                 var invokeBlock = new ActionBlock<ScriptInvocationContext>(ctx => SendInvocationRequestOld(ctx));
@@ -353,6 +353,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
                         context.ResultSource.SetCanceled();
                         return;
                     }
+                    // TODO: problem is here with null ref in "ToRpcInvocationRequest"
                     InvocationRequest invocationRequest = context.ToRpcInvocationRequest(IsTriggerMetadataPopulatedByWorker(), _workerChannelLogger, _workerCapabilities);
                     _executingInvocations.TryAdd(invocationRequest.InvocationId, context);
 

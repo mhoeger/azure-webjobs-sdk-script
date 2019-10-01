@@ -242,12 +242,11 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
             if (_functions == null)
             {
+                // todo replace this string scriptPath = _options.CurrentValue.ScriptPath;
+                // string scriptPath = "D:\\mhoeger\\test\\one-js-func";
                 string scriptPath = _options.CurrentValue.ScriptPath;
                 _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
-            }
-
-            if (httpContext.Request.Path.Value == "/specialize")
-            {
+                // assumes that we are not in placeholder mode
                 await channel.SendFunctionLoadRequests(_functions);
             }
 

@@ -18,29 +18,29 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             InvocationRequest invocationRequest = new InvocationRequest()
             {
                 FunctionId = context.FunctionMetadata.FunctionId,
-                InvocationId = context.ExecutionContext.InvocationId.ToString(),
+                InvocationId = context.ExecutionContext != null ? context.ExecutionContext.InvocationId.ToString() : "1234",
                 TraceContext = GetRpcTraceContext(context.Traceparent, context.Tracestate, context.Attributes, logger),
             };
 
-            foreach (var pair in context.BindingData)
-            {
-                if (pair.Value != null)
-                {
-                    if ((pair.Value is HttpRequest) && isTriggerMetadataPopulatedByWorker)
-                    {
-                        continue;
-                    }
-                    invocationRequest.TriggerMetadata.Add(pair.Key, pair.Value.ToRpc(logger, capabilities));
-                }
-            }
-            foreach (var input in context.Inputs)
-            {
-                invocationRequest.InputData.Add(new ParameterBinding()
-                {
-                    Name = input.name,
-                    Data = input.val.ToRpc(logger, capabilities)
-                });
-            }
+            //foreach (var pair in context.BindingData)
+            //{
+            //    if (pair.Value != null)
+            //    {
+            //        if ((pair.Value is HttpRequest) && isTriggerMetadataPopulatedByWorker)
+            //        {
+            //            continue;
+            //        }
+            //        invocationRequest.TriggerMetadata.Add(pair.Key, pair.Value.ToRpc(logger, capabilities));
+            //    }
+            //}
+            //foreach (var input in context.Inputs)
+            //{
+            //    invocationRequest.InputData.Add(new ParameterBinding()
+            //    {
+            //        Name = input.name,
+            //        Data = input.val.ToRpc(logger, capabilities)
+            //    });
+            //}
 
             return invocationRequest;
         }
