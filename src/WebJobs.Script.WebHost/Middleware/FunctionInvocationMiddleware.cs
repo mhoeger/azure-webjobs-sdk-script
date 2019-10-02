@@ -244,7 +244,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             {
                 // todo replace this string scriptPath = _options.CurrentValue.ScriptPath;
                 // string scriptPath = "D:\\mhoeger\\test\\one-js-func";
-                string scriptPath = _options.CurrentValue.ScriptPath;
+                // string scriptPath = _options.CurrentValue.ScriptPath;
+                string scriptPath = "/home/site/wwwroot";
                 _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
                 // assumes that we are not in placeholder mode
                 await channel.SendFunctionLoadRequests(_functions);
