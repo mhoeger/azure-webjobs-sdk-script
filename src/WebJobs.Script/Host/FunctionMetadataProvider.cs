@@ -260,22 +260,18 @@ namespace Microsoft.Azure.WebJobs.Script
             string functionPrimary = null;
             string attributeSource = (string)functionConfig["attributeSource"];
 
-            if (!string.IsNullOrEmpty(attributeSource))
+            if (string.IsNullOrEmpty(attributeSource))
             {
-                string scriptPath = fileSystem.Path.Combine(scriptDirectory, attributeSource);
-                if (!fileSystem.File.Exists(scriptPath))
-                {
-                    throw new FunctionConfigurationException("Invalid script file name configuration. The 'scriptFile' property is set to a file that does not exist.");
-                }
-
-                functionPrimary = scriptPath;
+                return null;
             }
 
-            if (string.IsNullOrEmpty(functionPrimary))
+            string scriptPath = fileSystem.Path.Combine(scriptDirectory, attributeSource);
+            if (!fileSystem.File.Exists(scriptPath))
             {
-                throw new FunctionConfigurationException("Unable to determine the primary function script. Try renaming your entry point script to 'run' (or 'index' in the case of Node), " +
-                    "or alternatively you can specify the name of the entry point script explicitly by adding a 'scriptFile' property to your function metadata.");
+                throw new FunctionConfigurationException("Invalid script file name configuration. The 'scriptFile' property is set to a file that does not exist.");
             }
+
+            functionPrimary = scriptPath;
 
             return Path.GetFullPath(functionPrimary);
         }
