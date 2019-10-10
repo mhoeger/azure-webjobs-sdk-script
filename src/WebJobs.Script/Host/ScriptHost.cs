@@ -609,13 +609,14 @@ namespace Microsoft.Azure.WebJobs.Script
 
             foreach (var metadata in functionMetadataList)
             {
-                if (!metadata.IsDirect)
+                if (!metadata.IsDirect && string.IsNullOrEmpty(metadata.AttributeSource))
                 {
                     continue;
                 }
 
-                string path = metadata.ScriptFile;
-                var typeName = Utility.GetFullClassName(metadata.EntryPoint);
+                string path = metadata.AttributeSource ?? metadata.ScriptFile;
+                var entryPoint = string.IsNullOrEmpty(metadata.AttributeSource) ? metadata.EntryPoint : "Azure.Functions." + metadata.Name;
+                var typeName = Utility.GetFullClassName(entryPoint);
 
                 Assembly assembly = FunctionAssemblyLoadContext.Shared.LoadFromAssemblyPath(path);
                 var type = assembly.GetType(typeName);

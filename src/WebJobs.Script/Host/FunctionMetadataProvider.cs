@@ -144,6 +144,7 @@ namespace Microsoft.Azure.WebJobs.Script
             }
             functionMetadata.Language = ParseLanguage(functionMetadata.ScriptFile, workerConfigs);
             functionMetadata.EntryPoint = (string)functionConfig["entryPoint"];
+            functionMetadata.AttributeSource = DeterminePrimaryAttributeSource(functionConfig, scriptDirectory, fileSystem);
 
             return true;
         }
@@ -235,6 +236,39 @@ namespace Microsoft.Azure.WebJobs.Script
                         fileSystem.Path.GetFileNameWithoutExtension(p).ToLowerInvariant() == "run" ||
                         fileSystem.Path.GetFileName(p).ToLowerInvariant() == "index.js");
                 }
+            }
+
+            if (string.IsNullOrEmpty(functionPrimary))
+            {
+                throw new FunctionConfigurationException("Unable to determine the primary function script. Try renaming your entry point script to 'run' (or 'index' in the case of Node), " +
+                    "or alternatively you can specify the name of the entry point script explicitly by adding a 'scriptFile' property to your function metadata.");
+            }
+
+            return Path.GetFullPath(functionPrimary);
+        }
+
+        /// <summary>
+        /// Determines which script should be considered the "primary" entry point script.
+        /// </summary>
+        /// <exception cref="ConfigurationErrorsException">Thrown if the function metadata points to an invalid script file, or no script files are present.</exception>
+        internal static string DeterminePrimaryAttributeSource(JObject functionConfig, string scriptDirectory, IFileSystem fileSystem = null)
+        {
+            fileSystem = fileSystem ?? new FileSystem();
+
+            // First see if there is an explicit primary file indicated
+            // in config. If so use that.
+            string functionPrimary = null;
+            string attributeSource = (string)functionConfig["attributeSource"];
+
+            if (!string.IsNullOrEmpty(attributeSource))
+            {
+                string scriptPath = fileSystem.Path.Combine(scriptDirectory, attributeSource);
+                if (!fileSystem.File.Exists(scriptPath))
+                {
+                    throw new FunctionConfigurationException("Invalid script file name configuration. The 'scriptFile' property is set to a file that does not exist.");
+                }
+
+                functionPrimary = scriptPath;
             }
 
             if (string.IsNullOrEmpty(functionPrimary))

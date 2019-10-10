@@ -74,5 +74,7 @@ namespace Microsoft.Azure.WebJobs.Script.Description
                 return Bindings.Where(p => p.Direction != BindingDirection.In);
             }
         }
+
+        public string AttributeSource { get; set; }
     }
 }
