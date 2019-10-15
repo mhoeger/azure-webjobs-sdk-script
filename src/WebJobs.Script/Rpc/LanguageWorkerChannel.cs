@@ -5,13 +5,16 @@ using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Azure.WebJobs.Script.Description;
 using Microsoft.Azure.WebJobs.Script.Diagnostics;
 using Microsoft.Azure.WebJobs.Script.Eventing;
@@ -20,6 +23,7 @@ using Microsoft.Azure.WebJobs.Script.Grpc.Messages;
 using Microsoft.Azure.WebJobs.Script.ManagedDependencies;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using static Microsoft.Azure.WebJobs.Script.Grpc.Messages.RpcLog.Types;
 using FunctionMetadata = Microsoft.Azure.WebJobs.Script.Description.FunctionMetadata;
 using MsgType = Microsoft.Azure.WebJobs.Script.Grpc.Messages.StreamingMessage.ContentOneofCase;
@@ -130,6 +134,57 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
         // send capabilities to worker, wait for WorkerInitResponse
         internal void SendWorkerInitRequest(RpcEvent startEvent)
         {
+            // JIT ToRPC
+            BindingMetadata bindingMetadataIn = new BindingMetadata()
+            {
+                Type = "httpTrigger",
+                Direction = BindingDirection.In,
+                Name = "req"
+            };
+
+            BindingMetadata bindingMetadataOut = new BindingMetadata()
+            {
+                Type = "http",
+                Direction = BindingDirection.Out,
+                Name = "res"
+            };
+
+            Collection<BindingMetadata> bindings = new Collection<BindingMetadata>()
+                {
+                    bindingMetadataIn,
+                    bindingMetadataOut
+                };
+
+            FunctionMetadata functionMetadata = new FunctionMetadata()
+            {
+                FunctionDirectory = @"D:\pgopaGit\azure-functions-nodejs-worker\test\end-to-end\testFunctionApp\HttpTrigger",
+                Language = "node",
+                Name = "HttpTrigger",
+                ScriptFile = @"D:\pgopaGit\azure-functions-nodejs-worker\test\end-to-end\testFunctionApp\HttpTrigger\index.js",
+                IsProxy = false,
+                IsDisabled = false,
+                IsDirect = false
+            };
+
+            ScriptInvocationContext scriptInvocationContext = new ScriptInvocationContext()
+            {
+                FunctionMetadata = functionMetadata,
+                ResultSource = new TaskCompletionSource<ScriptInvocationResult>()
+            };
+
+            // var testInvokeRequest = GetTestHttpInvocationRequest(scriptInvocationContext);
+            InvocationRequest testInvokeRequest = scriptInvocationContext.ToRpcInvocationRequest(IsTriggerMetadataPopulatedByWorker(), _workerChannelLogger, _workerCapabilities);
+
+            _workerChannelLogger.LogDebug("Jitting ToRpc done:{FunctionId}", testInvokeRequest.FunctionId);
+
+            // JIT ToObject
+            var headers = new HeaderDictionary();
+            headers.Add("content-type", "application/json");
+            HttpRequest request = CreateHttpRequest("GET", "http://localhost/api/httptrigger-scenarios", headers);
+            TypedData testTypedData = request.ToRpc(_workerChannelLogger, _workerCapabilities);
+            testTypedData.ToObject();
+            _workerChannelLogger.LogDebug("Jitting ToObject done");
+
             _workerChannelLogger.LogDebug("Worker Process started. Received StartStream message");
             _inboundWorkerEvents.Where(msg => msg.MessageType == MsgType.WorkerInitResponse)
                 .Timeout(workerInitTimeout)
@@ -334,7 +389,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             }
         }
 
-        public async Task SendInvocationRequest(ScriptInvocationContext context)
+        public async Task SendInvocationRequest(ScriptInvocationContext context, HttpRequest request = null)
         {
             await _functionLoadTask.Task;
             try
@@ -354,6 +409,12 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
                     }
                     // TODO: problem is here with null ref in "ToRpcInvocationRequest"
                     InvocationRequest invocationRequest = context.ToRpcInvocationRequest(IsTriggerMetadataPopulatedByWorker(), _workerChannelLogger, _workerCapabilities);
+                    invocationRequest.InputData.Add(new ParameterBinding()
+                    {
+                        Name = context.FunctionMetadata.Name,
+                        Data = request.ToRpc(_workerChannelLogger, _workerCapabilities)
+                    });
+
                     _executingInvocations.TryAdd(invocationRequest.InvocationId, context);
 
                     SendStreamingMessage(new StreamingMessage
@@ -368,10 +429,54 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             }
         }
 
+        public static HttpRequest CreateHttpRequest(string method, string uriString, IHeaderDictionary headers = null, object body = null)
+        {
+            var uri = new Uri(uriString);
+            var request = new DefaultHttpContext().Request;
+            var requestFeature = request.HttpContext.Features.Get<IHttpRequestFeature>();
+            requestFeature.Method = method;
+            requestFeature.Scheme = uri.Scheme;
+            requestFeature.Path = uri.GetComponents(UriComponents.KeepDelimiter | UriComponents.Path, UriFormat.Unescaped);
+            requestFeature.PathBase = string.Empty;
+            requestFeature.QueryString = uri.GetComponents(UriComponents.KeepDelimiter | UriComponents.Query, UriFormat.Unescaped);
+
+            headers = headers ?? new HeaderDictionary();
+
+            if (!string.IsNullOrEmpty(uri.Host))
+            {
+                headers.Add("Host", uri.Host);
+            }
+
+            if (body != null)
+            {
+                byte[] bytes = null;
+                if (body is string bodyString)
+                {
+                    bytes = Encoding.UTF8.GetBytes(bodyString);
+                }
+                else if (body is byte[] bodyBytes)
+                {
+                    bytes = bodyBytes;
+                }
+                else
+                {
+                    string bodyJson = JsonConvert.SerializeObject(body);
+                    bytes = Encoding.UTF8.GetBytes(bodyJson);
+                }
+
+                requestFeature.Body = new MemoryStream(bytes);
+                request.ContentLength = request.Body.Length;
+                headers.Add("Content-Length", request.Body.Length.ToString());
+            }
+
+            requestFeature.Headers = headers;
+
+            return request;
+        }
+
         internal void InvokeResponse(InvocationResponse invokeResponse)
         {
             _workerChannelLogger.LogDebug("InvocationResponse received for invocation id: {Id}", invokeResponse.InvocationId);
-            _workerChannelLogger.LogDebug("Result is {result}. Return value is: {return}", invokeResponse.Result, invokeResponse.ReturnValue);
             if (_executingInvocations.TryRemove(invokeResponse.InvocationId, out ScriptInvocationContext context)
                 && invokeResponse.Result.IsSuccess(context.ResultSource))
             {

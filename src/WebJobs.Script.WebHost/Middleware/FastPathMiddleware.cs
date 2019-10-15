@@ -96,7 +96,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                     Logger = _loggerFactory.CreateLogger(func.Name)
                 };
 
-                await channel.SendInvocationRequest(scriptInvocationContext);
+                await channel.SendInvocationRequest(scriptInvocationContext, httpContext.Request);
                 await scriptInvocationContext.ResultSource.Task;
 
                 var t = await scriptInvocationContext.ResultSource.Task;
