@@ -88,6 +88,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
                 ActionContext actionContext = new ActionContext(context, new RouteData(), new ActionDescriptor());
                 await result.ExecuteResultAsync(actionContext);
+                return;
             }
 
             if (_next != null)
@@ -245,6 +246,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                 // todo replace this string scriptPath = _options.CurrentValue.ScriptPath;
                 // string scriptPath = "D:\\mhoeger\\test\\one-js-func";
                 // string scriptPath = _options.CurrentValue.ScriptPath;
+
                 string scriptPath = "/home/site/wwwroot";
                 _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
                 // assumes that we are not in placeholder mode
@@ -289,7 +291,6 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                 };
 
                 await channel.SendInvocationRequest(scriptInvocationContext);
-                await scriptInvocationContext.ResultSource.Task;
 
                 var t = await scriptInvocationContext.ResultSource.Task;
                 return new OkObjectResult(t.Return);

@@ -371,6 +371,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
         internal void InvokeResponse(InvocationResponse invokeResponse)
         {
             _workerChannelLogger.LogDebug("InvocationResponse received for invocation id: {Id}", invokeResponse.InvocationId);
+            _workerChannelLogger.LogDebug("Result is {result}. Return value is: {return}", invokeResponse.Result, invokeResponse.ReturnValue);
             if (_executingInvocations.TryRemove(invokeResponse.InvocationId, out ScriptInvocationContext context)
                 && invokeResponse.Result.IsSuccess(context.ResultSource))
             {
@@ -382,7 +383,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
                     var result = new ScriptInvocationResult()
                     {
                         Outputs = bindingsDictionary,
-                        Return = invokeResponse?.ReturnValue?.ToObject()
+                        Return = invokeResponse?.ReturnValue?.ToObject() ?? bindingsDictionary
                     };
                     context.ResultSource.SetResult(result);
                 }
