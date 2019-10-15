@@ -244,10 +244,12 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             if (_functions == null)
             {
                 // todo replace this string scriptPath = _options.CurrentValue.ScriptPath;
-                // string scriptPath = "D:\\mhoeger\\test\\one-js-func";
-                // string scriptPath = _options.CurrentValue.ScriptPath;
-
                 string scriptPath = "/home/site/wwwroot";
+                // string scriptPath = _options.CurrentValue.ScriptPath;
+                if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development"))
+                {
+                    scriptPath = "D:\\mhoeger\\test\\one-js-func";
+                }
                 _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
                 // assumes that we are not in placeholder mode
                 await channel.SendFunctionLoadRequests(_functions);
@@ -262,7 +264,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
             var triggerBinding = func.InputBindings.SingleOrDefault(p => p.IsTrigger);
             triggerBinding.Raw.TryGetValue("authLevel", StringComparison.OrdinalIgnoreCase, out JToken auth);
-            Enum.TryParse(auth.ToString(), out AuthorizationLevel authLevel);
+            Enum.TryParse(auth.ToString(), true, out AuthorizationLevel authLevel);
 
             // IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
             bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, func.IsProxy, authLevel);

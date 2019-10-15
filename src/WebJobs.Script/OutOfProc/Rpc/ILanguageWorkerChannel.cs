@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs.Script.Description;
 
 namespace Microsoft.Azure.WebJobs.Script.Rpc
@@ -21,7 +22,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
 
         Task SendFunctionLoadRequests(IEnumerable<FunctionMetadata> functions = null);
 
-        Task SendInvocationRequest(ScriptInvocationContext context);
+        Task SendInvocationRequest(ScriptInvocationContext context, HttpRequest request = null);
 
         Task SendFunctionEnvironmentReloadRequest();
 
