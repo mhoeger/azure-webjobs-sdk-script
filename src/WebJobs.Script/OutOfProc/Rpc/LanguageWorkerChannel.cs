@@ -348,14 +348,15 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             // be fixed outside of fast path changes. or at least needs to be!
             _functionLoadTask.SetResult(true);
 
-            if (_functionInputBuffers != null && _functionInputBuffers.Count() > 0)
-            {
-                // link the invocation inputs to the invoke call
-                var invokeBlock = new ActionBlock<ScriptInvocationContext>(ctx => SendInvocationRequestOld(ctx));
-                // associate the invocation input buffer with the function
-                var disposableLink = _functionInputBuffers[loadResponse.FunctionId].LinkTo(invokeBlock);
-                _inputLinks.Add(disposableLink);
-            }
+            // TODO: handle this well
+            //if (_functionInputBuffers != null && _functionInputBuffers.Count() > 0)
+            //{
+            //    // link the invocation inputs to the invoke call
+            //    var invokeBlock = new ActionBlock<ScriptInvocationContext>(ctx => SendInvocationRequestOld(ctx));
+            //    // associate the invocation input buffer with the function
+            //    var disposableLink = _functionInputBuffers[loadResponse.FunctionId].LinkTo(invokeBlock);
+            //    _inputLinks.Add(disposableLink);
+            //}
         }
 
         internal void SendInvocationRequestOld(ScriptInvocationContext context)
