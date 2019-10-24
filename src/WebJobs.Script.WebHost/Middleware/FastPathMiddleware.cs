@@ -67,6 +67,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                 {
                     ActionContext actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
                     await result.ExecuteResultAsync(actionContext);
+                    return;
                 }
             }
 
@@ -77,7 +78,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
         {
             // TODO: also discount proxies - currently assumes never proxies
             // || !_environment.FileSystemIsReadOnly()
-            if (_environment.IsPlaceholderModeEnabled())
+            if (_webHostEnvironment.InStandbyMode)
             {
                 return false;
             }
@@ -94,10 +95,9 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                 _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
 
                 // assumes that we are not in placeholder mode
-                var mixedBindings = _functions.Any(f => f.Bindings.Any(binding => binding.Type != "httpTrigger" && binding.Type != "http"));
-                var usingProxies = _functions.Any(f => f.IsProxy);
+                var invalid = _functions.Any(f => f.IsProxy || f.Bindings.Any(binding => binding.Type != "httpTrigger" && binding.Type != "http"));
 
-                _useFastPath = !mixedBindings && !usingProxies;
+                _useFastPath = !invalid;
             }
 
             return _useFastPath;
@@ -164,53 +164,6 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
             return new OkResult();
         }
-
-        //private async Task InvokeFastPath(HttpContext httpContext)
-        //{
-        //    IActionResult result;
-        //    IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
-        //    bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, executionFeature.Descriptor);
-        //    if (!authorized)
-        //    {
-        //        result = new UnauthorizedResult();
-        //    }
-        //    else
-        //    {
-        //        ILanguageWorkerChannel channel = await _webHostlanguageWorkerChannelManager.GetChannels("node").FirstOrDefault().Value.Task;
-
-        //        if (_functions == null)
-        //        {
-        //            string scriptPath = _options.CurrentValue.ScriptPath;
-        //            _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
-        //            await channel.SendFunctionLoadRequests(_functions);
-        //        }
-
-        //        var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
-
-        //        ScriptInvocationContext scriptInvocationContext = new ScriptInvocationContext()
-        //        {
-        //            FunctionMetadata = func,
-        //            ResultSource = new TaskCompletionSource<ScriptInvocationResult>(),
-        //            AsyncExecutionContext = System.Threading.ExecutionContext.Capture(),
-
-        //            // TODO: link up cancellation token to parameter descriptors
-        //            CancellationToken = CancellationToken.None,
-        //            Logger = _loggerFactory.CreateLogger(func.Name)
-        //        };
-
-        //        await channel.SendInvocationRequest(scriptInvocationContext, httpContext.Request);
-        //        await scriptInvocationContext.ResultSource.Task;
-
-        //        var t = await scriptInvocationContext.ResultSource.Task;
-        //        result = new OkObjectResult(t.Return);
-        //    }
-
-        //    if (result != null)
-        //    {
-        //        ActionContext actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
-        //        await result.ExecuteResultAsync(actionContext);
-        //    }
-        //}
 
         internal FunctionMetadata GetMatchingFunction(IEnumerable<FunctionMetadata> functions, string route)
         {
