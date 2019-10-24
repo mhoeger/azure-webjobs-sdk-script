@@ -78,7 +78,7 @@ namespace Microsoft.Azure.WebJobs.Script
             return ReadFunctionsMetadata(_workerConfigs, _functionErrors);
         }
 
-        private FunctionMetadata ReadFunctionMetadata(string functionDirectory, IEnumerable<WorkerConfig> workerConfigs, Dictionary<string, ICollection<string>> functionErrors, IFileSystem fileSystem = null)
+        internal static FunctionMetadata ReadFunctionMetadata(string functionDirectory, IEnumerable<WorkerConfig> workerConfigs, Dictionary<string, ICollection<string>> functionErrors, IFileSystem fileSystem = null)
         {
             string functionName = null;
 
