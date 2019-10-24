@@ -66,7 +66,6 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             });
 
             builder.UseMiddleware<JobHostPipelineMiddleware>();
-
             builder.UseMiddleware<FunctionInvocationMiddleware>();
 
             // TODO: fit this in better
@@ -74,7 +73,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             builder.UseWhen(VirtualFileSystemMiddleware.IsVirtualFileSystemRequest, config => config.UseMiddleware<VirtualFileSystemMiddleware>());
 
             // Ensure the HTTP binding routing is registered after all middleware
-            // builder.UseHttpBindingRouting(applicationLifetime, routes);
+            builder.UseHttpBindingRouting(applicationLifetime, routes);
 
             builder.UseMvc();
 

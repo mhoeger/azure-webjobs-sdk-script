@@ -195,7 +195,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                 var authenticateResult = await policyEvaluator.AuthenticateAsync(policy, context);
 
                 // Authorize using the function policy and resource
-                var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, descriptor);
+                HttpTriggerAttribute httpTrigger = descriptor.GetTriggerAttributeOrNull<HttpTriggerAttribute>();
+                var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, httpTrigger?.AuthLevel);
 
                 return authorizeResult.Succeeded;
             }
