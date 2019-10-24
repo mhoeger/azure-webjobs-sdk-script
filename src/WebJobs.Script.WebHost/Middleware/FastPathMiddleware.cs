@@ -187,7 +187,7 @@ Dictionary<string, ICollection<string>> functionErrors = null)
 
             foreach (var scriptDir in functionDirectories)
             {
-                var function = FunctionMetadataProvider.ReadFunctionMetadata(scriptDir, functionsWhiteList, workerConfigs, functionErrors);
+                var function = FunctionMetadataProvider.ReadFunctionMetadata(scriptDir, workerConfigs, functionErrors);
                 if (function != null)
                 {
                     functions.Add(function);
