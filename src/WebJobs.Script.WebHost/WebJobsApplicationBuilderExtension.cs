@@ -60,19 +60,16 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             });
             builder.UseMiddleware<ResponseContextItemsCheckMiddleware>();
 
-            //if (!standbyOptions.CurrentValue.InStandbyMode)
-            //{
-            //    builder.UseMiddleware<FastPathMiddleware>();
-            //}
+            builder.UseWhen(context => !context.Request.IsAdminRequest() && context.Request.Path.Value != "/", config =>
+            {
+                config.UseMiddleware<FastPathMiddleware>();
+            });
 
             builder.UseMiddleware<JobHostPipelineMiddleware>();
 
             builder.UseMiddleware<FunctionInvocationMiddleware>();
-            //if (standbyOptions.CurrentValue.InStandbyMode)
-            //{
-            //    builder.UseMiddleware<FunctionInvocationMiddleware>();
-            //}
 
+            // TODO: fit this in better
             // Register /admin/vfs, and /admin/zip to the VirtualFileSystem middleware.
             builder.UseWhen(VirtualFileSystemMiddleware.IsVirtualFileSystemRequest, config => config.UseMiddleware<VirtualFileSystemMiddleware>());
 

@@ -73,7 +73,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Proxy
 
             await rc.Handler.Invoke(httpContext);
 
-            FunctionInvocationMiddleware functionInvocationMiddleware = new FunctionInvocationMiddleware(null, null, null, null, null);
+            FunctionInvocationMiddleware functionInvocationMiddleware = new FunctionInvocationMiddleware(null);
 
             if (!httpContext.Items.TryGetValue(ScriptConstants.AzureFunctionsNestedProxyCount, out object nestedProxiesCount))
             {
