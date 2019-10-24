@@ -165,7 +165,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
 
         public async Task InitializeAsync(IEnumerable<FunctionMetadata> functions)
         {
-            if (_environment.IsPlaceholderModeEnabled() || _environment.GetEnvironmentVariable("FAST") == "1")
+            if (_environment.IsPlaceholderModeEnabled())
             {
                 return;
             }

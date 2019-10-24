@@ -102,6 +102,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             // user dependencies
             FunctionAssemblyLoadContext.ResetSharedContext();
 
+            // TODO: change so that we aren't always only specializing lang worker
             var t = true;
             if (t)
             {
