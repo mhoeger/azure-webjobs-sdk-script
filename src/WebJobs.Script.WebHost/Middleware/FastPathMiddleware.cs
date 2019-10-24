@@ -39,6 +39,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
         private RequestDelegate _invoke;
         private ILoggerFactory _loggerFactory;
         private IEnumerable<FunctionMetadata> _functions;
+        private bool _useFastPath = false;
+        private bool _functionsLoaded = false;
 
         private IWebHostLanguageWorkerChannelManager _webHostlanguageWorkerChannelManager;
 
@@ -58,33 +60,91 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
         public async Task Invoke(HttpContext httpContext)
         {
-            await _next(httpContext);
+            if (ShouldUseFastPath(httpContext))
+            {
+                IActionResult result = await InvokeFastPath(httpContext); // GetResultAsync(context, functionExecution);
+                if (result != null)
+                {
+                    ActionContext actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
+                    await result.ExecuteResultAsync(actionContext);
+                }
+            }
 
-            await _invoke(httpContext);
+            await _next(httpContext);
         }
 
-        private async Task InvokeFastPath(HttpContext httpContext)
+        private bool ShouldUseFastPath(HttpContext httpContext)
         {
-            IActionResult result;
-            IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
-            bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, executionFeature.Descriptor);
+            // TODO: also discount proxies - currently assumes never proxies
+            // || !_environment.FileSystemIsReadOnly()
+            if (_environment.IsPlaceholderModeEnabled())
+            {
+                return false;
+            }
+
+            if (_functions == null)
+            {
+                // TODO: replace this string scriptPath = _options.CurrentValue.ScriptPath;
+                string scriptPath = "/home/site/wwwroot";
+                // string scriptPath = _options.CurrentValue.ScriptPath;
+                if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development"))
+                {
+                    scriptPath = "D:\\mhoeger\\test\\one-js-func";
+                }
+                _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
+
+                // assumes that we are not in placeholder mode
+                var mixedBindings = _functions.Any(f => f.Bindings.Any(binding => binding.Type != "httpTrigger" && binding.Type != "http"));
+                var usingProxies = _functions.Any(f => f.IsProxy);
+
+                _useFastPath = !mixedBindings && !usingProxies;
+            }
+
+            return _useFastPath;
+        }
+
+        private async Task<IActionResult> InvokeFastPath(HttpContext httpContext)
+        {
+            ILanguageWorkerChannel channel = await _webHostlanguageWorkerChannelManager.GetChannels("node").FirstOrDefault().Value.Task;
+
+            // TODO: should handle this properly
+            if (channel == null)
+            {
+                return null;
+            }
+
+            if (!_functionsLoaded)
+            {
+                await channel.SendFunctionLoadRequests(_functions);
+            }
+
+            var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
+
+            if (func == null)
+            {
+                return null;
+            }
+
+            var triggerBinding = func.InputBindings.SingleOrDefault(p => p.IsTrigger);
+            triggerBinding.Raw.TryGetValue("authLevel", StringComparison.OrdinalIgnoreCase, out JToken auth);
+            Enum.TryParse(auth.ToString(), true, out AuthorizationLevel authLevel);
+
+            bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, authLevel);
             if (!authorized)
             {
-                result = new UnauthorizedResult();
+                return new UnauthorizedResult();
             }
-            else
+            if (func.IsDisabled &&
+                !AuthUtility.PrincipalHasAuthLevelClaim(httpContext.User, AuthorizationLevel.Admin))
             {
-                ILanguageWorkerChannel channel = await _webHostlanguageWorkerChannelManager.GetChannels("node").FirstOrDefault().Value.Task;
+                return new NotFoundResult();
+            }
 
-                if (_functions == null)
-                {
-                    string scriptPath = _options.CurrentValue.ScriptPath;
-                    _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
-                    await channel.SendFunctionLoadRequests(_functions);
-                }
-
-                var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
-
+            // TODO: figure out if this function is disabled or not
+            // IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
+            var canExecute = true; // executionFeature.CanExecute
+            if (canExecute)
+            {
                 ScriptInvocationContext scriptInvocationContext = new ScriptInvocationContext()
                 {
                     FunctionMetadata = func,
@@ -96,35 +156,77 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                     Logger = _loggerFactory.CreateLogger(func.Name)
                 };
 
-                await channel.SendInvocationRequest(scriptInvocationContext, httpContext.Request);
-                await scriptInvocationContext.ResultSource.Task;
+                await channel.SendInvocationRequest(scriptInvocationContext);
 
                 var t = await scriptInvocationContext.ResultSource.Task;
-                result = new OkObjectResult(t.Return);
+                return new OkObjectResult(t.Return);
             }
 
-            if (result != null)
-            {
-                ActionContext actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
-                await result.ExecuteResultAsync(actionContext);
-            }
+            return new OkResult();
         }
+
+        //private async Task InvokeFastPath(HttpContext httpContext)
+        //{
+        //    IActionResult result;
+        //    IFunctionExecutionFeature executionFeature = httpContext.Features.Get<IFunctionExecutionFeature>();
+        //    bool authorized = await AuthenticateAndAuthorizeAsync(httpContext, executionFeature.Descriptor);
+        //    if (!authorized)
+        //    {
+        //        result = new UnauthorizedResult();
+        //    }
+        //    else
+        //    {
+        //        ILanguageWorkerChannel channel = await _webHostlanguageWorkerChannelManager.GetChannels("node").FirstOrDefault().Value.Task;
+
+        //        if (_functions == null)
+        //        {
+        //            string scriptPath = _options.CurrentValue.ScriptPath;
+        //            _functions = ReadFunctionsMetadata(scriptPath, null, _workerConfigs);
+        //            await channel.SendFunctionLoadRequests(_functions);
+        //        }
+
+        //        var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
+
+        //        ScriptInvocationContext scriptInvocationContext = new ScriptInvocationContext()
+        //        {
+        //            FunctionMetadata = func,
+        //            ResultSource = new TaskCompletionSource<ScriptInvocationResult>(),
+        //            AsyncExecutionContext = System.Threading.ExecutionContext.Capture(),
+
+        //            // TODO: link up cancellation token to parameter descriptors
+        //            CancellationToken = CancellationToken.None,
+        //            Logger = _loggerFactory.CreateLogger(func.Name)
+        //        };
+
+        //        await channel.SendInvocationRequest(scriptInvocationContext, httpContext.Request);
+        //        await scriptInvocationContext.ResultSource.Task;
+
+        //        var t = await scriptInvocationContext.ResultSource.Task;
+        //        result = new OkObjectResult(t.Return);
+        //    }
+
+        //    if (result != null)
+        //    {
+        //        ActionContext actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
+        //        await result.ExecuteResultAsync(actionContext);
+        //    }
+        //}
 
         internal FunctionMetadata GetMatchingFunction(IEnumerable<FunctionMetadata> functions, string route)
         {
             var dict = new RouteValueDictionary();
             foreach (FunctionMetadata f in functions)
             {
-                if (RouteMatcher.TryMatch("/api/" + f.FunctionDirectory, route, out dict))
+                if (RouteMatcher.TryMatch("/api/" + f.Name, route, out dict))
                 {
                     return f;
                 }
             }
-            throw new Exception("NO FUNCTIONS FOUND!");
+            return null;
         }
 
         internal static Collection<FunctionMetadata> ReadFunctionsMetadata(string rootScriptPath, ICollection<string> functionsWhiteList, IEnumerable<WorkerConfig> workerConfigs,
-   Dictionary<string, ICollection<string>> functionErrors = null)
+Dictionary<string, ICollection<string>> functionErrors = null)
         {
             IEnumerable<string> functionDirectories = Directory.EnumerateDirectories(rootScriptPath);
 
@@ -141,25 +243,17 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             return functions;
         }
 
-        private async Task<bool> AuthenticateAndAuthorizeAsync(HttpContext context, FunctionDescriptor descriptor)
+        private async Task<bool> AuthenticateAndAuthorizeAsync(HttpContext context, AuthorizationLevel authLevel)
         {
-            if (!descriptor.Metadata.IsProxy)
-            {
-                var policyEvaluator = context.RequestServices.GetRequiredService<IPolicyEvaluator>();
-                AuthorizationPolicy policy = AuthUtility.CreateFunctionPolicy();
+            var policyEvaluator = context.RequestServices.GetRequiredService<IPolicyEvaluator>();
+            AuthorizationPolicy policy = AuthUtility.CreateFunctionPolicy();
+            // Authenticate the request
+            var authenticateResult = await policyEvaluator.AuthenticateAsync(policy, context);
 
-                // Authenticate the request
-                var authenticateResult = await policyEvaluator.AuthenticateAsync(policy, context);
+            // Authorize using the function policy and resource
+            var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, authLevel);
 
-                // Authorize using the function policy and resource
-                var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, descriptor);
-
-                return authorizeResult.Succeeded;
-            }
-            else
-            {
-                return true;
-            }
+            return authorizeResult.Succeeded;
         }
 
         internal class RouteMatcher
