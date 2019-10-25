@@ -347,6 +347,7 @@ namespace Microsoft.Azure.WebJobs.Script.Rpc
             // This assumes that only one function will be loaded, which we will assume because this will
             // be fixed outside of fast path changes. or at least needs to be!
             _functionLoadTask.SetResult(true);
+            _workerChannelLogger.LogDebug("done with loading response!");
 
             // TODO: handle this well
             //if (_functionInputBuffers != null && _functionInputBuffers.Count() > 0)
