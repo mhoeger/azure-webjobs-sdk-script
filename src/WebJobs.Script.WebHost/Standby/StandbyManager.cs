@@ -102,11 +102,13 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             // user dependencies
             FunctionAssemblyLoadContext.ResetSharedContext();
 
-            // TODO: change so that we aren't always only specializing lang worker
+            // TODO: find out somewhere along here if we're fast path or not
             var t = true;
             if (t)
             {
+                // Don't need to await because that is enforced in LanguageWorkerChannel. Tbh, true of non-fast path too
                 _ = _languageWorkerChannelManager.SpecializeAsync();
+                NotifyChange();
                 return;
             }
 

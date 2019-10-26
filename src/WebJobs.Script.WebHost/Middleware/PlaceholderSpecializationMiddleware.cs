@@ -41,7 +41,6 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
                 Task specializeTask;
                 using (System.Threading.ExecutionContext.SuppressFlow())
                 {
-                    // httpContext.Features.Set<IFastPathFeature>();
                     specializeTask = _standbyManager.SpecializeHostAsync();
                 }
                 await specializeTask;

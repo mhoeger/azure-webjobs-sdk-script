@@ -2,10 +2,14 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Dynamic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -16,6 +20,7 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Template;
 using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.WebJobs.Script.Binding;
 using Microsoft.Azure.WebJobs.Script.Description;
 using Microsoft.Azure.WebJobs.Script.Rpc;
 using Microsoft.Azure.WebJobs.Script.WebHost.Features;
@@ -23,6 +28,7 @@ using Microsoft.Azure.WebJobs.Script.WebHost.Security.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using FunctionMetadata = Microsoft.Azure.WebJobs.Script.Description.FunctionMetadata;
 
@@ -85,9 +91,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
             if (_functions == null)
             {
-                // TODO: replace this string scriptPath = _options.CurrentValue.ScriptPath;
-                string scriptPath = "/home/site/wwwroot";
-                // string scriptPath = _options.CurrentValue.ScriptPath;
+                // string scriptPath = "/home/site/wwwroot";
+                string scriptPath = _options.CurrentValue.ScriptPath;
                 if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development"))
                 {
                     scriptPath = "D:\\mhoeger\\test\\one-js-func";
@@ -116,6 +121,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
             if (!_functionsLoaded)
             {
                 await channel.SendFunctionLoadRequests(_functions);
+                _functionsLoaded = true;
             }
 
             var func = GetMatchingFunction(_functions, httpContext.Request.Path.Value);
@@ -158,8 +164,18 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Middleware
 
                 await channel.SendInvocationRequest(scriptInvocationContext);
 
-                var t = await scriptInvocationContext.ResultSource.Task;
-                return new OkObjectResult(t.Return);
+                var result = await scriptInvocationContext.ResultSource.Task;
+
+                if (result.Return is IDictionary returnJson)
+                {
+                    // Assume only one output
+                    foreach (var value in returnJson.Values)
+                    {
+                        return CreateResult(httpContext.Request, value);
+                    }
+                }
+
+                return CreateResult(httpContext.Request, result.Return);
             }
 
             return new OkResult();
@@ -207,6 +223,144 @@ Dictionary<string, ICollection<string>> functionErrors = null)
             var authorizeResult = await policyEvaluator.AuthorizeAsync(policy, authenticateResult, context, authLevel);
 
             return authorizeResult.Succeeded;
+        }
+
+        // TODO: this is completely copy pasted from HTTP bining, need a better way to share this code
+        internal static IActionResult CreateResult(HttpRequest request, object content)
+        {
+            string stringContent = content as string;
+            if (stringContent != null)
+            {
+                try
+                {
+                    // attempt to read the content as JObject/JArray
+                    content = JsonConvert.DeserializeObject(stringContent);
+                }
+                catch (JsonException)
+                {
+                    // not a json response
+                }
+            }
+
+            // see if the content is a response object, defining http response properties
+            IDictionary<string, object> responseObject = null;
+            if (content is JObject)
+            {
+                // TODO: FACAVAL - The call bellow is pretty fragile. This would cause issues
+                // if we invoke this with a JObject. Maintaining this to retain the original implementation
+                // but this should be revisited.
+                responseObject = JsonConvert.DeserializeObject<ExpandoObject>(content.ToString());
+            }
+            else
+            {
+                // Handle ExpandoObjects
+                responseObject = content as ExpandoObject;
+            }
+
+            int statusCode = StatusCodes.Status200OK;
+            IDictionary<string, object> responseHeaders = null;
+            bool enableContentNegotiation = false;
+            List<Tuple<string, string, CookieOptions>> cookies = new List<Tuple<string, string, CookieOptions>>();
+            if (responseObject != null)
+            {
+                ParseResponseObject(responseObject, ref content, out responseHeaders, out statusCode, out cookies, out enableContentNegotiation);
+            }
+
+            return CreateResult(request, statusCode, content, responseHeaders, cookies, enableContentNegotiation);
+        }
+
+        internal static void ParseResponseObject(IDictionary<string, object> responseObject, ref object content, out IDictionary<string, object> headers, out int statusCode, out List<Tuple<string, string, CookieOptions>> cookies, out bool enableContentNegotiation)
+        {
+            headers = null;
+            cookies = null;
+            statusCode = StatusCodes.Status200OK;
+            enableContentNegotiation = false;
+
+            // TODO: Improve this logic
+            // Sniff the object to see if it looks like a response object
+            // by convention
+            object bodyValue = null;
+            if (responseObject.TryGetValue(LanguageWorkerConstants.RpcHttpBody, out bodyValue, ignoreCase: true))
+            {
+                // the response content becomes the specified body value
+                content = bodyValue;
+
+                if (responseObject.TryGetValue(LanguageWorkerConstants.RpcHttpHeaders, out IDictionary<string, object> headersValue, ignoreCase: true))
+                {
+                    headers = headersValue;
+                }
+
+                if (TryParseStatusCode(responseObject, out int? responseStatusCode))
+                {
+                    statusCode = responseStatusCode.Value;
+                }
+
+                if (responseObject.TryGetValue<bool>(LanguageWorkerConstants.RpcHttpEnableContentNegotiation, out bool enableContentNegotiationValue, ignoreCase: true))
+                {
+                    enableContentNegotiation = enableContentNegotiationValue;
+                }
+
+                if (responseObject.TryGetValue(LanguageWorkerConstants.RpcHttpCookies, out List<Tuple<string, string, CookieOptions>> cookiesValue, ignoreCase: true))
+                {
+                    cookies = cookiesValue;
+                }
+            }
+        }
+
+        internal static bool TryParseStatusCode(IDictionary<string, object> responseObject, out int? statusCode)
+        {
+            statusCode = StatusCodes.Status200OK;
+
+            if (!responseObject.TryGetValue(LanguageWorkerConstants.RpcHttpStatusCode, out object statusValue, ignoreCase: true) &&
+                !responseObject.TryGetValue(LanguageWorkerConstants.RpcHttpStatus, out statusValue, ignoreCase: true))
+            {
+                return false;
+            }
+
+            if (statusValue is HttpStatusCode ||
+                statusValue is int)
+            {
+                statusCode = (int)statusValue;
+                return true;
+            }
+
+            if (statusValue is uint ||
+                statusValue is short ||
+                statusValue is ushort ||
+                statusValue is long ||
+                statusValue is ulong)
+            {
+                statusCode = Convert.ToInt32(statusValue);
+                return true;
+            }
+
+            var stringValue = statusValue as string;
+            int parsedStatusCode;
+            if (stringValue != null && int.TryParse(stringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedStatusCode))
+            {
+                statusCode = parsedStatusCode;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static IActionResult CreateResult(HttpRequest request, int statusCode, object content, IDictionary<string, object> headers, List<Tuple<string, string, CookieOptions>> cookies, bool enableContentNegotiation)
+        {
+            if (enableContentNegotiation)
+            {
+                // We only write the response through one of the formatters if
+                // the function has indicated that it wants to enable content negotiation
+                return new ScriptObjectResult(content, headers) { StatusCode = statusCode };
+            }
+            else
+            {
+                return new RawScriptResult(statusCode, content)
+                {
+                    Headers = headers,
+                    Cookies = cookies
+                };
+            }
         }
 
         internal class RouteMatcher
