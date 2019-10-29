@@ -99,7 +99,16 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Authentication
                 ISecretManager secretManager = secretManagerProvider.Current;
 
                 // see if the key specified is the master key
-                HostSecretsInfo hostSecrets = await secretManager.GetHostSecretsAsync().ConfigureAwait(false);
+                var hostSecretsTask = secretManager.GetHostSecretsAsync().ConfigureAwait(false);
+
+                IFunctionExecutionFeature executionFeature = request.HttpContext.Features.Get<IFunctionExecutionFeature>();
+                Task<IDictionary<string, string>> functionSecretsTask = null;
+                if (executionFeature != null)
+                {
+                    functionSecretsTask = secretManager.GetFunctionSecretsAsync(executionFeature.Descriptor.Name);
+                }
+
+                HostSecretsInfo hostSecrets = await hostSecretsTask;
                 if (!string.IsNullOrEmpty(hostSecrets.MasterKey) &&
                     Key.SecretValueEquals(keyValue, hostSecrets.MasterKey))
                 {
@@ -118,10 +127,9 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Authentication
                 }
 
                 // If there is a function specific key specified try to match against that
-                IFunctionExecutionFeature executionFeature = request.HttpContext.Features.Get<IFunctionExecutionFeature>();
-                if (executionFeature != null)
+                if (functionSecretsTask != null)
                 {
-                    IDictionary<string, string> functionSecrets = await secretManager.GetFunctionSecretsAsync(executionFeature.Descriptor.Name);
+                    IDictionary<string, string> functionSecrets = await functionSecretsTask;
                     if (HasMatchingKey(functionSecrets, keyValue, out keyName))
                     {
                         return (keyName, AuthorizationLevel.Function);
