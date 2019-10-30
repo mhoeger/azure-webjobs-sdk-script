@@ -60,6 +60,10 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
             });
             builder.UseMiddleware<ResponseContextItemsCheckMiddleware>();
 
+            // TODO: fit this in better
+            // Register /admin/vfs, and /admin/zip to the VirtualFileSystem middleware.
+            builder.UseWhen(VirtualFileSystemMiddleware.IsVirtualFileSystemRequest, config => config.UseMiddleware<VirtualFileSystemMiddleware>());
+
             builder.UseWhen(context => !context.Request.IsAdminRequest() && context.Request.Path.Value != "/", config =>
             {
                 config.UseMiddleware<FastPathMiddleware>();
@@ -67,10 +71,6 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
 
             builder.UseMiddleware<JobHostPipelineMiddleware>();
             builder.UseMiddleware<FunctionInvocationMiddleware>();
-
-            // TODO: fit this in better
-            // Register /admin/vfs, and /admin/zip to the VirtualFileSystem middleware.
-            builder.UseWhen(VirtualFileSystemMiddleware.IsVirtualFileSystemRequest, config => config.UseMiddleware<VirtualFileSystemMiddleware>());
 
             // Ensure the HTTP binding routing is registered after all middleware
             builder.UseHttpBindingRouting(applicationLifetime, routes);
