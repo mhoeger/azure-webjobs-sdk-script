@@ -4,11 +4,13 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Script.Description
 {
@@ -24,12 +26,14 @@ namespace Microsoft.Azure.WebJobs.Script.Description
             return _invokerMap[method];
         }
 
-        public static Type Generate(string functionAssemblyName, string typeName, Collection<CustomAttributeBuilder> typeAttributes, ICollection<FunctionDescriptor> functions)
+        public static Type Generate(string functionAssemblyName, string typeName, Collection<CustomAttributeBuilder> typeAttributes, ICollection<FunctionDescriptor> functions, ILogger logger = null)
         {
             if (functions == null)
             {
                 throw new ArgumentNullException("functions");
             }
+            var sw = new Stopwatch();
+            sw.Start();
 
             AssemblyName assemblyName = new AssemblyName(functionAssemblyName);
             AssemblyBuilder assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
@@ -216,6 +220,9 @@ namespace Microsoft.Azure.WebJobs.Script.Description
             }
 
             Type t = tb.CreateTypeInfo().AsType();
+
+            sw.Stop();
+            logger.LogWarning("TIME ELAPSED:" + sw.ElapsedMilliseconds);
 
             return t;
         }

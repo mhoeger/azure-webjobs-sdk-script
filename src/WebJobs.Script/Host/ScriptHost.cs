@@ -453,10 +453,11 @@ namespace Microsoft.Azure.WebJobs.Script
             var types = new List<Type>();
 
             // generate the Type wrapper
-            if (directTypes == null)
+            if (directTypes == null || true)
             {
                 string typeName = string.Format(CultureInfo.InvariantCulture, "{0}.{1}", GeneratedTypeNamespace, GeneratedTypeName);
-                Type functionWrapperType = FunctionGenerator.Generate(HostAssemblyName, typeName, typeAttributes, Functions);
+                Type functionWrapperType = FunctionGenerator.Generate(HostAssemblyName, typeName, typeAttributes, Functions, _logger);
+
                 types.Add(functionWrapperType);
             }
 
