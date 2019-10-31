@@ -449,13 +449,17 @@ namespace Microsoft.Azure.WebJobs.Script
             string generatingMsg = string.Format(CultureInfo.InvariantCulture, "Generating {0} job function(s)", Functions.Count);
             _logger?.LogInformation(generatingMsg);
 
-            // generate the Type wrapper
-            string typeName = string.Format(CultureInfo.InvariantCulture, "{0}.{1}", GeneratedTypeNamespace, GeneratedTypeName);
-            Type functionWrapperType = FunctionGenerator.Generate(HostAssemblyName, typeName, typeAttributes, Functions);
-
             // configure the Type locator
             var types = new List<Type>();
-            types.Add(functionWrapperType);
+
+            // generate the Type wrapper
+            if (directTypes == null)
+            {
+                string typeName = string.Format(CultureInfo.InvariantCulture, "{0}.{1}", GeneratedTypeNamespace, GeneratedTypeName);
+                Type functionWrapperType = FunctionGenerator.Generate(HostAssemblyName, typeName, typeAttributes, Functions);
+                types.Add(functionWrapperType);
+            }
+
             types.AddRange(directTypes);
 
             _typeLocator.SetTypes(types);
